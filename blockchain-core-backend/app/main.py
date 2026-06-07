@@ -3,7 +3,7 @@ from flask import Flask, request
 from flask_cors import CORS
 import requests
 import json
-from app.Blockchain import Blockchain
+from .Blockchain import Blockchain
 import hashlib
 
 server = os.environ.get('WEBSITE_URL', 'http://127.0.0.1:5001') + '/api'

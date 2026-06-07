@@ -1,5 +1,5 @@
-from app.Block import Block
-from app import config
+from .Block import Block
+from . import config
 import datetime
 import hashlib
 import json

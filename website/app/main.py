@@ -8,7 +8,7 @@ import threading
 from flask import Flask, render_template, request, redirect, session, jsonify
 import psycopg2
 
-from app import config
+from . import config
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
