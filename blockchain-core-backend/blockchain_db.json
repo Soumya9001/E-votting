@@ -1,0 +1,34 @@
+[
+    {
+        "index": 0,
+        "candidate_id": "0",
+        "timestamp": "2026-06-03 16:26:27.779522",
+        "proof": "0",
+        "previous_hash": "0",
+        "hash": "f0f2209115a518def1ae303a7171e04e02bd251e70655dbf2e66848fb26eef82"
+    },
+    {
+        "index": 1,
+        "candidate_id": "100001",
+        "timestamp": "2026-06-03 16:45:59.599610",
+        "proof": "j5",
+        "previous_hash": "f0f2209115a518def1ae303a7171e04e02bd251e70655dbf2e66848fb26eef82",
+        "hash": "bd97d0185cdc9dbe2e0ad5c378799a811ba41b130b379be49e809365d4443f99"
+    },
+    {
+        "index": 2,
+        "candidate_id": "100001",
+        "timestamp": "2026-06-03 16:53:27.312995",
+        "proof": "Z3",
+        "previous_hash": "bd97d0185cdc9dbe2e0ad5c378799a811ba41b130b379be49e809365d4443f99",
+        "hash": "b8f851a2d212fe0a2603cfedba1bcac9b81716efd4944f021e11459a0c3d31c9"
+    },
+    {
+        "index": 3,
+        "candidate_id": "100002",
+        "timestamp": "2026-06-07 21:42:52.082880",
+        "proof": "44",
+        "previous_hash": "b8f851a2d212fe0a2603cfedba1bcac9b81716efd4944f021e11459a0c3d31c9",
+        "hash": "8ffa523d46b052dc47d4897ae6ad247d612eff2a88b1b344be70ea14e7cbfa05"
+    }
+]

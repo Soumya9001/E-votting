@@ -1,12 +1,70 @@
 from app.Block import Block
 from app import config
-from pymongo import MongoClient
 import datetime
 import hashlib
 import json
 
-cluster = MongoClient(f"mongodb+srv://{(config.username)}:{(config.password)}@cluster0.j2n3h.mongodb.net/{(config.username)}?retryWrites=true&w=majority")
-collection = cluster[config.username].blockchain
+import os
+
+class MockCollection:
+    def __init__(self, filepath="blockchain_db.json"):
+        self.filepath = filepath
+        if not os.path.exists(filepath):
+            with open(filepath, "w") as f:
+                json.dump([], f)
+                
+    def _read(self):
+        try:
+            with open(self.filepath, "r") as f:
+                return json.load(f)
+        except Exception:
+            return []
+            
+    def _write(self, data):
+        with open(self.filepath, "w") as f:
+            json.dump(data, f, indent=4)
+
+    def count_documents(self, filter_dict=None):
+        return len(self._read())
+
+    def insert_one(self, document):
+        data = self._read()
+        data.append(document)
+        self._write(data)
+
+    def find(self, filter_dict=None):
+        return MockQueryResult(self._read())
+
+class MockQueryResult:
+    def __init__(self, data):
+        self.data = data
+        
+    def skip(self, n):
+        self.skipped_data = self.data[n:]
+        return self
+        
+    def __getitem__(self, index):
+        if hasattr(self, 'skipped_data'):
+            return self.skipped_data[index]
+        return self.data[index]
+        
+    def __iter__(self):
+        if hasattr(self, 'skipped_data'):
+            return iter(self.skipped_data)
+        return iter(self.data)
+
+collection = None
+try:
+    if not getattr(config, 'username', '') or "YOUR_MONGODB" in config.username:
+        raise Exception("MongoDB placeholder credentials used")
+    from pymongo import MongoClient
+    cluster = MongoClient(f"mongodb+srv://{(config.username)}:{(config.password)}@cluster1.q0hkw4q.mongodb.net/{(config.username)}?retryWrites=true&w=majority", serverSelectionTimeoutMS=2000)
+    cluster.server_info()
+    collection = cluster[config.username].blockchain
+except Exception as e:
+    print(f"MongoDB connection failed ({e}). Falling back to local JSON blockchain database...")
+    collection = MockCollection()
+
 
 
 class Blockchain:
@@ -40,7 +98,7 @@ class Blockchain:
     def get_blockchain(self):
         data = list(collection.find({}))
         for doc in data:
-            doc.pop('_id')
+            doc.pop('_id', None)
         return json.dumps(data)
 
     def parse_block_to_dict(self, block : Block):

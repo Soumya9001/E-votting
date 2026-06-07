@@ -6,5 +6,5 @@ if __name__ == '__main__':
     if(hasattr(config, 'debugMode')):
         if(config.debugMode == True):
             debugMode = True
-    app.run(debug=debugMode)
+    app.run(debug=debugMode, port=5001)
     

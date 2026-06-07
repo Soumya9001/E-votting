@@ -1,0 +1,8 @@
+# Flask secret key for sessions
+appSecretKey = "your_secret_key_here"
+
+# Database URL for PostgreSQL (e.g., postgresql://username:password@localhost:5432/db_name)
+DATABASE_URL = "postgresql://username:password@localhost:5432/db_name"
+
+# Debug mode for the Flask server (True/False)
+debugMode = True

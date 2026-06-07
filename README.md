@@ -24,4 +24,4 @@ https://e-voting-blockchain-website.herokuapp.com/
 ![live_results](https://user-images.githubusercontent.com/57187745/96224865-d9a28e00-0fad-11eb-8053-568f0a54cfb6.png)
 
 -------------
-Made with :heart:  by [Anshit](https://github.com/Anshit01) and [Shwetal](https://github.com/shwetalsoni)
+Made with :heart:  by [Soumyajit](https://github.com/Soumya9001), [Anish](https://github.com/Soumya9001), [Provat](https://github.com/Soumya9001) and [Ayan](https://github.com/Soumya9001)

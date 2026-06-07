@@ -1,0 +1,3 @@
+# MongoDB configuration credentials for blockchain storage
+username = "YOUR_MONGODB_USERNAME"
+password = "YOUR_MONGODB_PASSWORD"

@@ -2,13 +2,16 @@ function validate() {
     var name = $('#name').val()
     var dob = $('#dob').val()
     var aadhar_id = $('#aadhar-id').val()
+    var voter_card_raw = $('#voter-card').val()
+    var voter_card = voter_card_raw.replace(/[^A-Za-z0-9]/g, '')
+    $('#voter-card').val(voter_card.toUpperCase())
     var email = $('#email').val()
     var contact_no = $('#contact-no').val()
     var password = $('#password').val()
     var password_confirm = $('#password-confirm').val()
     var warning = $('#warning')
 
-    if(name == '' || dob == '' || aadhar_id == '' || email == '' || contact_no == '' || password == '' || password_confirm == ''){
+    if(name == '' || dob == '' || aadhar_id == '' || voter_card == '' || email == '' || contact_no == '' || password == '' || password_confirm == ''){
         warning.html('All fields are required.')
         // document.getElementById('warning').scrollIntoView()
         // $('html, body').animate({scrollTop: warning.offset().top}, 'slow');
@@ -17,17 +20,25 @@ function validate() {
     }
     var regex_name = /[a-zA-Z]/
     var regex_aadhar_id = /^[1-9]{1}[0-9]{11}$/
+    var regex_voter_card = /^[A-Za-z]{3}[0-9]{7}$/
     var regex_email = /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/
     var regex_contact_no = /^[1-9]{1}[0-9]{9}$/
 
     var msg = ''
+    var maxDob = new Date()
+    maxDob.setFullYear(maxDob.getFullYear() - 18)
+
     if(regex_name.test(name) == false){
         msg = 'Invalid name'
     }else if(isNaN(new Date(dob).getDate())){
         msg = 'Invalid date'
+    }else if(new Date(dob) > maxDob){
+        msg = 'You must be 18 years or older to register'
     }
     else if(regex_aadhar_id.test(aadhar_id) == false){
         msg = 'Invalid Aadhar ID'
+    }else if(regex_voter_card.test(voter_card) == false){
+        msg = 'Invalid Voter Card Number (format: XXX1234567)'
     }else if(regex_email.test(email) == false){
         msg = 'Invalid email ID'
     }else if(regex_contact_no.test(contact_no) == false){

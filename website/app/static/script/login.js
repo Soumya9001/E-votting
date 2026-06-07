@@ -1,18 +1,20 @@
 function validate() {
     name = $('#name').val()
-    voter_id = $('#voter_id').val()
+    voter_card_raw = $('#voter_card').val()
+    voter_card = voter_card_raw.replace(/[^A-Za-z0-9]/g, '')
+    $('#voter_card').val(voter_card.toUpperCase())
     password = $('#password').val()
     warning = $('#warning')
-    if(name == '' || voter_id == '' || password == ''){
+    if(name == '' || voter_card == '' || password == ''){
         warning.html("Please fill all the fields")
         glowWarning()
         return false
     }
-    var voter_id_regex = /^[1-9]{1}[0-9]{11}$/
-    if(voter_id_regex.test(voter_id)){
+    var voter_card_regex = /^[A-Za-z]{3}[0-9]{7}$/
+    if(voter_card_regex.test(voter_card)){
         return true
     }
-    warning.html("Invalid Voter ID")
+    warning.html("Invalid Voter Card Number (format: XXX1234567)")
     glowWarning()
     return false
 }

@@ -1,3 +1,4 @@
+import os
 from flask import Flask, request
 from flask_cors import CORS
 import requests
@@ -5,7 +6,7 @@ import json
 from app.Blockchain import Blockchain
 import hashlib
 
-server = 'https://e-voting-blockchain-website.herokuapp.com/api'
+server = os.environ.get('WEBSITE_URL', 'http://127.0.0.1:5001') + '/api'
 
 app = Flask(__name__)
 CORS(app)
@@ -13,8 +14,9 @@ CORS(app)
 blockchain = Blockchain()
 
 @app.route('/')
+@app.route('/healthz')
 def index():
-    return 'Index'
+    return 'OK'
 
 @app.route('/get_blockchain')
 def get_blockchain():

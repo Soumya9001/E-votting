@@ -61,38 +61,35 @@ function castVote() {
     }
     var success = 0
     var error = ''
-    $.when(
-        $.post(servers[0] + '/cast_vote', data, function(response) {
-            if(response['status'] == 1){
-                success++
-            }else{
-                error = response['error']
-            }
-        }),
-        $.post(servers[1] + '/cast_vote', data, function(response) {
-            if(response['status'] == 1){
-                success++
-            }else{
-                error = response['error']
-            }
-        }),
-        $.post(servers[2] + '/cast_vote', data, function(response) {
-            if(response['status'] == 1){
-                success++
-            } else {
-                error = response['error']
-            }
-        })
-    ).done(
-        function(res1, res2, res3) {
-            if(success > servers.length / 2){
-                voteCastSuccess()
-            }else{
-                voteCastFailure(error)
-            }
-            $(window).unbind('beforeunload')
+    var deferreds = []
+    for (var i = 0; i < servers.length; i++) {
+        (function(url) {
+            var dfd = $.Deferred();
+            $.post(url + '/cast_vote', data)
+                .done(function(response) {
+                    if (response['status'] == 1) {
+                        success++;
+                    } else {
+                        error = response['error'];
+                    }
+                    dfd.resolve();
+                })
+                .fail(function() {
+                    error = 'Connection to blockchain node failed';
+                    dfd.resolve();
+                });
+            deferreds.push(dfd.promise());
+        })(servers[i]);
+    }
+
+    $.when.apply($, deferreds).done(function() {
+        if(success > servers.length / 2){
+            voteCastSuccess()
+        }else{
+            voteCastFailure(error)
         }
-    )
+        $(window).unbind('beforeunload')
+    });
 }
 
 function voteCastSuccess() {

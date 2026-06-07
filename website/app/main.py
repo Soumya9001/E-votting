@@ -9,30 +9,132 @@ from flask import Flask, render_template, request, redirect, session, jsonify
 import psycopg2
 
 from app import config
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0 #############WARNING: remove in production
 app.secret_key = config.appSecretKey
 
-BLOCKCHAIN_SERVERS = [
-    'https://e-voting-blockchain-core-1.herokuapp.com',
-    'https://e-voting-blockchain-core-2.herokuapp.com',
-    'https://e-voting-blockchain-core-3.herokuapp.com'
-]
+def get_max_dob():
+    return (datetime.now() - timedelta(days=18*365.25)).strftime('%Y-%m-%d')
+
+BLOCKCHAIN_SERVERS = os.environ.get('BLOCKCHAIN_URL', 'http://127.0.0.1:5000').split(',')
+
+import sqlite3
+
+class SQLiteCursorWrapper:
+    def __init__(self, cursor, conn):
+        self.cursor = cursor
+        self.conn = conn
+
+    def execute(self, query, params=None):
+        # Convert %s to ?
+        query = query.replace('%s', '?')
+        # Replace MySQL style double quoted variables in raw sql formatting (like in line 186)
+        if params is None:
+            query = query.replace('"{dob}"', "'{dob}'")
+            query = query.replace('"{key}"', "'{key}'")
+        else:
+            query = query.replace('"{dob}"', "?")
+            query = query.replace('"{key}"', "?")
+
+        if params is not None:
+            self.cursor.execute(query, params)
+        else:
+            self.cursor.execute(query)
+        self.conn.commit()
+
+    def fetchone(self):
+        row = self.cursor.fetchone()
+        if row is None:
+            return None
+        return tuple(row)
+
+    def fetchall(self):
+        rows = self.cursor.fetchall()
+        return [tuple(row) for row in rows]
+
+class SQLiteConnectionWrapper:
+    def __init__(self, db_path="e_voting.db"):
+        self.conn = sqlite3.connect(db_path, check_same_thread=False)
+        self.conn.row_factory = sqlite3.Row
+        self.autocommit = True
+
+    def cursor(self):
+        return SQLiteCursorWrapper(self.conn.cursor(), self.conn)
+
+    def rollback(self):
+        self.conn.rollback()
+
+def init_sqlite_db(db_path="e_voting.db"):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS voter_list (
+        voter_id INTEGER PRIMARY KEY,
+        name TEXT,
+        password_hash TEXT,
+        aadhar_id TEXT,
+        voter_card TEXT DEFAULT '',
+        dob TEXT,
+        email TEXT DEFAULT '',
+        contact_no TEXT,
+        key_hash TEXT,
+        voted INTEGER DEFAULT 0,
+        verified INTEGER DEFAULT 0
+    )
+    """)
+    try:
+        cursor.execute("ALTER TABLE voter_list ADD COLUMN voter_card TEXT DEFAULT ''")
+    except:
+        pass
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS candidate_list (
+        candidate_id INTEGER PRIMARY KEY,
+        name TEXT,
+        party TEXT
+    )
+    """)
+    cursor.execute("SELECT count(*) FROM candidate_list")
+    if cursor.fetchone()[0] == 0:
+        candidates = [
+            (100001, "Candidate A", "Party Blue"),
+            (100002, "Candidate B", "Party Orange"),
+            (100003, "Candidate C", "Party Green")
+        ]
+        cursor.executemany("INSERT INTO candidate_list VALUES (?, ?, ?)", candidates)
+    conn.commit()
+    conn.close()
+
+USING_SQLITE = False
 
 DATABASE_URL = ''
 if 'DATABASE_URL' in dir(config):
     DATABASE_URL = config.DATABASE_URL
 else:
-    DATABASE_URL = os.environ['DATABASE_URL']
+    DATABASE_URL = os.environ.get('DATABASE_URL', '')
 
-connection = psycopg2.connect(DATABASE_URL, sslmode = 'require')
-connection.autocommit = True
-cursor = connection.cursor()
+try:
+    if not DATABASE_URL or "username" in DATABASE_URL or "localhost" in DATABASE_URL:
+        raise Exception("Database URL is empty or placeholder")
+    connection = psycopg2.connect(DATABASE_URL, sslmode = 'require')
+    connection.autocommit = True
+    cursor = connection.cursor()
+except Exception as e:
+    print(f"PostgreSQL connection failed ({e}). Falling back to SQLite local database...")
+    init_sqlite_db()
+    connection = SQLiteConnectionWrapper()
+    cursor = connection.cursor()
+    USING_SQLITE = True
+
 
 @app.route('/')
 def index():
     return render_template('index.html', loggedin = is_loggedin())
+
+@app.route('/healthz')
+def healthz():
+    return 'OK'
 
 
 @app.route('/dashboard')
@@ -40,20 +142,22 @@ def dashboard():
     if is_loggedin():
         voter_id = session['voter_id']
         try:
-            query = "select aadhar_id, dob, contact_no, email, voted from voter_list where voter_id = %s"
+            query = "select aadhar_id, voter_card, dob, contact_no, email, voted from voter_list where voter_id = %s"
             cursor.execute(query, (voter_id, ))
             res = cursor.fetchone()
             aadhar_id = res[0]
-            dob = res[1]
-            contact_no = res[2]
-            email = res[3]
-            voted = False if res[4] == 0 else True
+            voter_card = res[1]
+            dob = res[2]
+            contact_no = res[3]
+            email = res[4]
+            voted = False if res[5] == 0 else True
             return render_template(
                 "dashboard.html",
                 loggedin = True,
                 username = session['name'],
                 voter_id = voter_id,
                 aadhar_id = aadhar_id,
+                voter_card = voter_card,
                 dob = dob,
                 contact_no = contact_no,
                 email = email,
@@ -69,16 +173,17 @@ def dashboard():
 
 @app.route('/register', methods=['POST', 'GET'])
 def register():
+    maxDate = get_max_dob()
     if request.method == 'GET':
         if is_loggedin():
             return redirect('/')
-        return render_template('register.html', loggedin = False)
+        return render_template('register.html', loggedin = False, maxDate = maxDate)
     else:
         aadhar_id = request.form['aadhar_id']
         data = dict(request.form)
         response = create_user(data)
         if 'error' in response:
-            return render_template('register.html', error=response['error'], loggedin = False)
+            return render_template('register.html', error=response['error'], loggedin = False, maxDate = maxDate)
         key = response['key']
         cursor.execute("select voter_id, name from voter_list where aadhar_id = %s", (aadhar_id, ))
         res = cursor.fetchone()
@@ -100,19 +205,19 @@ def login_route():
         try:
             name = request.form['name']
             name = ' '.join([word.capitalize() for word in name.split()])
-            voter_id = request.form['voter_id']
+            voter_card = re.sub(r'[^A-Za-z0-9]', '', request.form['voter_card']).upper()
             password = request.form['password']
             password_hash = hashlib.sha256(password.encode()).hexdigest()
-            cursor.execute("select name, password_hash from voter_list where voter_id = %s;", (voter_id, ))
+            cursor.execute("select name, voter_id, password_hash from voter_list where voter_card = %s;", (voter_card, ))
             result = cursor.fetchone()
             if result is not None:
-                if name == result[0] and password_hash == result[1]:
-                    login(name, voter_id)
+                if name == result[0] and password_hash == result[2]:
+                    login(name, result[1])
                     return redirect('/')
                 else:
                     return render_template('login.html', warning="User name or password does not match. Try again.")
             else:
-                return render_template('login.html', warning="Invalid Voter ID.")
+                return render_template('login.html', warning="Invalid Voter Card Number.")
         except Exception as e:
             print(str(e))
             return render_template('error.html', error="Unable to connect to the database. Please try again later.")
@@ -170,21 +275,23 @@ def logout():
 
 #################################################*Andriod App API Routes*#############################################
 
-@app.route('/create_user', methods=['POST'])        #TODO: use create_user function
+@app.route('/create_user', methods=['POST'])
 def create_user_route():
     try:
         name = request.form['name']
         password = request.form['password']
         password_hash = hashlib.sha256(password.encode()).hexdigest()
         aadhar_id = request.form['aadhar_id']
+        voter_card = re.sub(r'[^A-Za-z0-9]', '', request.form.get('voter_card', '')).upper()
         dob = request.form['dob']
         contact_no = request.form['contact_no']
-        lst = [name, aadhar_id, dob, contact_no]
+        lst = [name, aadhar_id, dob, contact_no, random.randrange(10**10)]
         key = hashlib.md5(str(lst).encode()).hexdigest()
+        key_hash = hashlib.sha256(key.encode()).hexdigest()
         voter_id = int(aadhar_id[-5:]+ contact_no[-3:])
-        print(voter_id)
-        query = f'''insert into voter_list values({voter_id}, '{name}', '{password_hash}', {aadhar_id}, "{dob}", {contact_no}, "{key}", 0, 0);'''
-        cursor.execute(query)
+        cursor.execute("insert into voter_list (voter_id, name, password_hash, aadhar_id, voter_card, dob, email, contact_no, key_hash, voted, verified) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0, 1);", (
+            voter_id, name, password_hash, aadhar_id, voter_card, dob, '', contact_no, key_hash
+        ))
         return key
     except Exception as e:
         connection.rollback()
@@ -283,6 +390,7 @@ def create_user(data : dict):
         password = data['password']
         password_hash = hashlib.sha256(password.encode()).hexdigest()
         aadhar_id = data['aadhar_id']
+        voter_card = re.sub(r'[^A-Za-z0-9]', '', data.get('voter_card', '')).upper()
         dob = data['dob']
         contact_no = data['contact_no']
         email = data['email']
@@ -292,8 +400,12 @@ def create_user(data : dict):
             error_msg = 'Invalid name'
         elif dob == '':
             error_msg = 'Invalid Date of Birth'
+        elif dob > get_max_dob():
+            error_msg = 'You must be 18 years or older to register'
         elif re.search('^[1-9]{1}[0-9]{11}$', aadhar_id) is None:
             error_msg = 'Invalid Aadhar ID'
+        elif re.search('^[A-Z]{3}[0-9]{7}$', voter_card) is None:
+            error_msg = 'Invalid Voter Card Number (format: XXX1234567)'
         elif re.search('^[1-9]{1}[0-9]{9}$', contact_no) is None:
             error_msg = 'Invalid Contact Number'
         elif re.search("[^@]+@[^@]+\\.[^@]+", email) is None:
@@ -303,20 +415,25 @@ def create_user(data : dict):
             key = hashlib.md5(str(lst).encode()).hexdigest()
             key_hash = hashlib.sha256(key.encode()).hexdigest()
             cursor.execute("select voter_id from voter_list where aadhar_id = %s", (aadhar_id, ))
-            if cursor.fetchone() is None:
-                cursor.execute("insert into voter_list (name, password_hash, aadhar_id, dob, email, contact_no, key_hash, voted, verified) values (%s, %s, %s, %s, %s, %s, %s, 0, %s);", (
-                        name,
-                        password_hash,
-                        aadhar_id,
-                        dob,
-                        email,
-                        contact_no,
-                        key_hash,
-                        verified
-                ))
-                return {'key': key}
-            else:
+            if cursor.fetchone() is not None:
                 error_msg = 'This Aadhar ID is already registered.'
+            else:
+                cursor.execute("select voter_id from voter_list where voter_card = %s", (voter_card, ))
+                if cursor.fetchone() is not None:
+                    error_msg = 'This Voter Card Number is already registered.'
+                else:
+                    cursor.execute("insert into voter_list (name, password_hash, aadhar_id, voter_card, dob, email, contact_no, key_hash, voted, verified) values (%s, %s, %s, %s, %s, %s, %s, %s, 0, %s);", (
+                            name,
+                            password_hash,
+                            aadhar_id,
+                            voter_card,
+                            dob,
+                            email,
+                            contact_no,
+                            key_hash,
+                            verified
+                    ))
+                    return {'key': key}
     except Exception as e:
         print('Error: ', e)
         error_msg = 'Interval server error in creating Voter ID'
@@ -386,8 +503,13 @@ def check_mysql_connection(cursor):
         print("Reconnecting to database server...")
         print(str(e1))
         try:
-            connection = psycopg2.connect(DATABASE_URL, sslmode='require')
-            connection.autocommit = True
+            if USING_SQLITE:
+                connection = SQLiteConnectionWrapper()
+                cursor = connection.cursor()
+            else:
+                connection = psycopg2.connect(DATABASE_URL, sslmode='require')
+                connection.autocommit = True
+                cursor = connection.cursor()
             globals()['connection'] = connection
             cursor = connection.cursor()
         except Exception as e:
